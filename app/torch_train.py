@@ -202,7 +202,6 @@ class LSTM(nn.Module):
     return predictions
 
 if __name__ == "__main__":
-
   # intialize horovod
   hvd.init()
 
@@ -211,7 +210,11 @@ if __name__ == "__main__":
   os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
   gpus = [gpu for gpu in GPUtil.getGPUs()]
   os.environ["CUDA_VISIBLE_DEVICES"] = ",".join([str(g.id) for g in gpus])
-
+  
+  if not torch.cuda.is_available():
+      print("Needs a GPU to run!")
+      exit()
+ 
 
   epochs = 100
   # Horovod: adjust number of epochs based on number of GPUs.
