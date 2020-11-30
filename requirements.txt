@@ -1,0 +1,7 @@
+gputil
+pandas
+numpy
+sklearn
+requests
+torch
+horovod
