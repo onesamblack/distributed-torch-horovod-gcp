@@ -160,6 +160,7 @@ class LSTM(nn.Module):
   def _initialize_layer(self, initializer, layer):
     if initializer:
       pass
+      #todo - add some dynamic initialization methods
     layer.to(self.device)
 
   def _make_tensor(self, tensor_type, *args, **kwargs):
