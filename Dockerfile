@@ -1,10 +1,11 @@
-FROM nvidia/cuda:11.1.0-base-ubuntu18.04
+FROM nvidia/cuda:11.1-runtime-ubuntu18.04
 
 
 #set up environment
 RUN apt-get update && apt-get install --no-install-recommends --no-install-suggests -y curl
 RUN apt-get -y install python3
 RUN apt-get -y install python3-pip
+RUN apt-get -y install cmake
 
 COPY requirements.txt /app/requirements.txt
 
