@@ -7,12 +7,15 @@ import math
 import os
 import warnings
 import torch
+import multiprocessing
+import GPUtil
 from torch import nn
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import horovod.torch as hvd
+
 
 
 
@@ -211,9 +214,11 @@ if __name__ == "__main__":
   os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
   gpus = [gpu for gpu in GPUtil.getGPUs()]
   os.environ["CUDA_VISIBLE_DEVICES"] = ",".join([str(g.id) for g in gpus])
+  device_number = hvd.rank()
 
 
-  epochs = 100
+
+  epochs = 5
   # Horovod: adjust number of epochs based on number of GPUs.
   epochs = int(math.ceil(epochs / hvd.size()))
   window_length = 10
@@ -224,11 +229,12 @@ if __name__ == "__main__":
 
   _DEVICE = torch.device("cuda:{}".format(str(torch.cuda.current_device())))
 
-  print("this process has been distributed to the following devices: {}"\
+  if device_number==0:
+    print("horovod has distributed to the following devices: {}"\
       .format(["{}, device_id: cuda:{}"\
                .format(gpu.name, gpu.id) for gpu in GPUtil.getGPUs()]), flush=True)
 
-  print(f"this process is using device - {_DEVICE}", flsh=True)
+  print(f"this process is using device - {_DEVICE}", flush=True)
 
 
 
@@ -246,17 +252,17 @@ if __name__ == "__main__":
 
   model = LSTM(n_features=23, window_size=window_length, output_size=1, h_size=256, device=_DEVICE)
   optimizer = torch.optim.Adam(model.parameters(), lr=1e-6)  
-
+  optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
+  
   model.to(_DEVICE)
 
-  loss_fn = nn.MSELoss(reduce=True, reduction='mean')
-  iter = 0
+  loss_fn = nn.MSELoss(reduce=True, reduction="mean")
   train_times = []
 
   hvd.broadcast_parameters(model.state_dict(), root_rank=0)
 
-  for epoch in range(epochs):
-    start_time = datetime.datetime.now()
+
+  def train(epoch, device):
     for i, data in enumerate(train_loader):
       # move x and y to the gpu
       inputs, labels = data[0].to(_DEVICE), data[1].to(_DEVICE)
@@ -269,14 +275,35 @@ if __name__ == "__main__":
       # Updating parameters
       optimizer.step()
       optimizer.zero_grad()
-      iter +=1
+      # write stats if running on main
+    if device == 0:
+      print(f"epoch: {epoch}, train_loss: {loss}", flush=True)
+
+
+  def validate(epoch,device):
     for i, test_data in enumerate(test_loader):
-      # move x and y to the gpu
       test_inputs, test_labels = test_data[0].to(_DEVICE), test_data[1].to(_DEVICE)
       test_pred = model(test_inputs)
       test_loss = loss_fn(test_pred, test_labels)
-      print('Epoch: {}, Iteration: {}. train_loss: {},  valid_loss: {}'.format(epoch, iter, loss, test_loss))
+
+    if device == 0:
+      print(f"epoch: {epoch}, test_loss: {test_loss}", flush=True)
+  
+  #get statistics on the main node
+  if device_number == 0:
+    start_time = datetime.datetime.now()
+  
+  for epoch in range(epochs):
+    epoch_start = datetime.datetime.now()
+    train(epoch, device_number)
+    validate(epoch, device_number)
+    epoch_end = datetime.datetime.now()
+    epoch_time = (epoch_end - epoch_start).total_seconds()
+    train_times.append(epoch_time)
+
+  print(f"device: {hvd.rank()}, avg_time_per_epoch:{np.mean(train_times)}")
+  if device_number == 0:
     end_time = datetime.datetime.now()
-    time = (end_time - start_time).total_seconds()
-    train_times.append(time)
-    print("time taken: {}".format(time))
+    total_time = (end_time - start_time).total_seconds() / 60
+    print(f"total training time in minutes: {total_time}")
+  
