@@ -14,5 +14,5 @@ RUN ["pip3","install","-r","/app/requirements.txt"]
 COPY app/ /app/
 WORKDIR /app
 
-CMD ["horovodrun","-np", 4, "-H", "localhost:4", "app/torch_train.py"]
+CMD ["horovodrun","-np", 4, "-H", "localhost:4", "python3", "app/torch_train.py"]
 
