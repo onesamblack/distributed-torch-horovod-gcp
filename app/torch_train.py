@@ -163,6 +163,7 @@ class LSTM(nn.Module):
   def _initialize_layer(self, initializer, layer):
     if initializer:
       pass
+      #todo - add some dynamic initialization methods
     layer.to(self.device)
 
   def _make_tensor(self, tensor_type, *args, **kwargs):
@@ -205,7 +206,6 @@ class LSTM(nn.Module):
     return predictions
 
 if __name__ == "__main__":
-
   # intialize horovod
   hvd.init()
 
@@ -217,8 +217,12 @@ if __name__ == "__main__":
   device_number = hvd.rank()
 
 
-
-  epochs = 5
+  
+  if not torch.cuda.is_available():
+      print("Needs a GPU to run!")
+      exit()
+ 
+  epochs = 100
   # Horovod: adjust number of epochs based on number of GPUs.
   epochs = int(math.ceil(epochs / hvd.size()))
   window_length = 10
